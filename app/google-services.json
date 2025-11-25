@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "251340363997",
+    "firebase_url": "https://iot-system-c818f-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "iot-system-c818f",
+    "storage_bucket": "iot-system-c818f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:251340363997:android:4c3b922ca0209afe36a334",
+        "android_client_info": {
+          "package_name": "com.ptit.heartrate"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBnRa2j0BbB1ss6o2elaj2GrOtw0o3KUUI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
