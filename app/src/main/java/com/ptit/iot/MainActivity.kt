@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -36,12 +37,14 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.ptit.iot.ui.CaloScreen
+import com.ptit.iot.ui.StatisticsScreenEnhanced
 import com.ptit.iot.ui.EditProfileScreen
 import com.ptit.iot.ui.ProfileScreen
 import com.ptit.iot.ui.main.MainScreen
 import com.ptit.iot.ui.theme.IOTHeartRateTheme
+import com.ptit.iot.ui.WorkoutScreen
 import kotlinx.serialization.Serializable
+import com.ptit.iot.viewmodel.StatisticsViewModel
 
 class MainActivity : ComponentActivity() {
     private val bluetoothPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -89,7 +92,10 @@ class MainActivity : ComponentActivity() {
 object HomeRoute
 
 @Serializable
-object CaloRoute
+object WorkoutRoute
+
+@Serializable
+object StaitisticsRoute
 
 @Serializable
 object ProfileRoute
@@ -116,10 +122,16 @@ fun MainNavigationApp(userId: String?) {
             contentDescription = "Home"
         ),
         NavigationItem(
-            route = CaloRoute,
+            route = StaitisticsRoute,
             icon = Icons.AutoMirrored.Outlined.ShowChart,
-            label = "Calo",
-            contentDescription = "Calo"
+            label = "Statistics",
+            contentDescription = "Statistics"
+        ),
+        NavigationItem(
+            route = WorkoutRoute,
+            icon = Icons.Outlined.FitnessCenter,
+            label = "Workout",
+            contentDescription = "Workout"
         ),
         NavigationItem(
             route = ProfileRoute,
@@ -178,8 +190,11 @@ fun MainNavigationApp(userId: String?) {
             composable<HomeRoute> {
                 MainScreen(userId = userId)
             }
-            composable<CaloRoute> {
-                CaloScreen()
+            composable<StaitisticsRoute> {
+                StatisticsScreenEnhanced()
+            }
+            composable<WorkoutRoute> {
+                WorkoutScreen()
             }
             composable<ProfileRoute> {
                 ProfileScreen(
@@ -188,6 +203,7 @@ fun MainNavigationApp(userId: String?) {
                     }
                 )
             }
+
             composable<EditProfileRoute> {
                 EditProfileScreen(
                     onNavigateBack = {
