@@ -26,4 +26,7 @@ interface MainApi {
     suspend fun updateProfile(
         @Body updateProfileRequest: UpdateProfileRequest
     ): Resource<Unit>
+
+    @POST("api/train-model")
+    suspend fun trainModel(): Resource<ApiResponse<TrainResponse>>
 }

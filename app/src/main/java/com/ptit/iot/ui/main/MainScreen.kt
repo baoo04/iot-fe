@@ -2,6 +2,8 @@ package com.ptit.iot.ui.main
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
+import android.media.RingtoneManager
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,14 +21,21 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -54,6 +63,7 @@ import com.ptit.iot.R
 import com.ptit.iot.viewmodel.ConnectionState
 import com.ptit.iot.viewmodel.HeartRateState
 import com.ptit.iot.viewmodel.MainViewModel
+import com.ptit.iot.viewmodel.TrainState
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -67,6 +77,10 @@ fun MainScreen(
     val connectionState by viewModel.connectionState.collectAsStateWithLifecycle()
     val scannedDevices by viewModel.scanState.collectAsStateWithLifecycle()
 
+    // NEW STATES: Lấy trạng thái Train và Cảnh báo từ ViewModel
+    val trainState by viewModel.trainState.collectAsStateWithLifecycle()
+    val isWarningEnabled by viewModel.isWarningEnabled.collectAsStateWithLifecycle()
+
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
     var showBottomSheet by remember { mutableStateOf(false) }
@@ -76,6 +90,33 @@ fun MainScreen(
     // Set user ID when the screen is first composed
     LaunchedEffect(userId) {
         userId?.let { viewModel.setUserId(it) }
+    }
+
+    // NEW LOGIC: Lắng nghe sự kiện phát loa từ ViewModel
+    LaunchedEffect(Unit) {
+        viewModel.playWarningSound.collect {
+            try {
+                val notification = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                val r = RingtoneManager.getRingtone(context, notification)
+                r.play()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    // NEW LOGIC: Hiển thị Toast khi Train xong hoặc Lỗi
+    LaunchedEffect(trainState) {
+        when (trainState) {
+            is TrainState.Success -> {
+                Toast.makeText(context, "Huấn luyện AI thành công!", Toast.LENGTH_SHORT).show()
+            }
+            is TrainState.Error -> {
+                val msg = (trainState as TrainState.Error).message
+                Toast.makeText(context, "Lỗi: $msg", Toast.LENGTH_LONG).show()
+            }
+            else -> {}
+        }
     }
 
     Box(
@@ -102,7 +143,7 @@ fun MainScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Nhịp tim",
+                    text = "Nhịp tim & AI", // Cập nhật tiêu đề nhẹ
                     style = TextStyle(
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Normal
@@ -144,6 +185,11 @@ fun MainScreen(
                                 maxBpm = data.maxBpm,
                                 avgBpm = data.avgBpm,
                                 warning = data.warning,
+                                // Truyền các biến mới xuống
+                                isWarningEnabled = isWarningEnabled,
+                                trainState = trainState,
+                                onToggleWarning = { viewModel.toggleWarning(it) },
+                                onTrainModel = { viewModel.trainModel() },
                                 onDisconnect = { viewModel.disconnect() }
                             )
                         }
@@ -426,6 +472,11 @@ fun HeartRateContent(
     maxBpm: Int,
     avgBpm: Int,
     warning: Int,
+    // NEW PARAMS cho chức năng AI
+    isWarningEnabled: Boolean,
+    trainState: TrainState,
+    onToggleWarning: (Boolean) -> Unit,
+    onTrainModel: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
     Column(
@@ -540,7 +591,7 @@ fun HeartRateContent(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(horizontal = 16.dp)
                 .clip(RoundedCornerShape(10.dp))
                 .background(statusColor)
                 .padding(16.dp)
@@ -571,6 +622,109 @@ fun HeartRateContent(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // =====================================================================
+        // NEW FEATURE: BẢNG ĐIỀU KHIỂN AI & CẢNH BÁO
+        // =====================================================================
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            shape = RoundedCornerShape(10.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.White
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Text(
+                    text = "Cài đặt AI & Cảnh báo",
+                    style = TextStyle(
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF333333)
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 1. Switch Bật/Tắt Loa
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Notifications,
+                            contentDescription = "Sound",
+                            tint = if (isWarningEnabled) Color(0xFFDF1F32) else Color.Gray,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Phát loa cảnh báo",
+                                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                            )
+                            Text(
+                                text = if (isWarningEnabled) "Đang bật" else "Đang tắt",
+                                style = TextStyle(fontSize = 12.sp, color = Color.Gray)
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = isWarningEnabled,
+                        onCheckedChange = onToggleWarning,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFFDF1F32),
+                            checkedTrackColor = Color(0xFFFFCDD2)
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Divider(color = Color(0xFFEEEEEE), thickness = 1.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 2. Button Train Model
+                val isTraining = trainState is TrainState.Loading
+
+                Button(
+                    onClick = onTrainModel,
+                    enabled = !isTraining,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFDF1F32),
+                        disabledContainerColor = Color(0xFFFFCDD2)
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    if (isTraining) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Đang huấn luyện...")
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Huấn luyện lại mô hình AI")
+                    }
+                }
+            }
+        }
+        // =====================================================================
+
+        Spacer(modifier = Modifier.height(24.dp))
+
         OutlinedButton(
             onClick = onDisconnect,
             colors = ButtonDefaults.outlinedButtonColors(
@@ -582,6 +736,8 @@ fun HeartRateContent(
         ) {
             Text("Ngắt kết nối")
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
