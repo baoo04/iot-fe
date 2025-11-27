@@ -17,18 +17,16 @@ import com.ptit.iot.RemoteModule
 import com.ptit.iot.Resource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlin.math.sqrt
 
 class MainViewModel : ViewModel() {
 
-    // --- STATES (Trạng thái UI) ---
+    // --- STATES ---
     private val _heartRateState = MutableStateFlow<HeartRateState>(HeartRateState.Loading)
     val heartRateState: StateFlow<HeartRateState> = _heartRateState.asStateFlow()
 
@@ -41,29 +39,16 @@ class MainViewModel : ViewModel() {
     private val _trainState = MutableStateFlow<TrainState>(TrainState.Idle)
     val trainState: StateFlow<TrainState> = _trainState.asStateFlow()
 
-    private val _isWarningEnabled = MutableStateFlow(false)
-    val isWarningEnabled: StateFlow<Boolean> = _isWarningEnabled.asStateFlow()
-
-    private val _playWarningSound = Channel<Unit>()
-    val playWarningSound = _playWarningSound.receiveAsFlow()
-
-    // --- VARIABLES ---
     private var gatt: BluetoothGatt? = null
     private var heartRateJob: Job? = null
     private var userId: String? = null
     private val heartRateHistory = mutableListOf<Int>()
-    private var lastAlertTimestamp: Long = 0
-    private val ALERT_COOLDOWN = 5000L
 
-    // --- STEP COUNTER VARIABLES (Đếm bước chân) ---
+    // Logic đếm bước chân
     private var stepCount = 0
     private var lastStepTimestamp: Long = 0
-    // Ngưỡng phát hiện bước chân (m/s^2). Gia tốc trọng trường ~ 9.8.
-    // Khi bước đi, xung lực sẽ vượt qua mức này.
     private val STEP_THRESHOLD = 10.5
-    private val STEP_DELAY_MS = 300L // Khoảng cách tối thiểu giữa 2 bước (tránh đếm trùng)
-
-    // --- FUNCTIONS ---
+    private val STEP_DELAY_MS = 300L
 
     fun setUserId(userId: String?) {
         this.userId = userId
@@ -84,8 +69,8 @@ class MainViewModel : ViewModel() {
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun connectToDevice(device: BluetoothDevice?, context: Context) {
-        // Chế độ test không cần thiết bị thật
         if (device == null) {
+            // Chế độ test không cần thiết bị thật
             _connectionState.value = ConnectionState.Connected
             startHeartRateUpdates()
             return
@@ -107,7 +92,6 @@ class MainViewModel : ViewModel() {
                 if (status == BluetoothGatt.GATT_SUCCESS) {
                     val service = gatt.getService(DeviceUUID.DEVICE_SERVICE_UUID)
                     if (service != null) {
-                        Log.d("BLE", "Service discovered. Attempting to write UserID.")
                         userId?.let { uid -> writeUserIdToDevice(gatt, uid) }
                     } else {
                         _connectionState.value = ConnectionState.Error("Không tìm thấy Service UUID")
@@ -122,7 +106,6 @@ class MainViewModel : ViewModel() {
             override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
                 if (status == BluetoothGatt.GATT_SUCCESS) {
                     _connectionState.value = ConnectionState.Connected
-                    Log.d("BLE", "UserID written successfully. Starting API updates.")
                     startHeartRateUpdates()
                 } else {
                     _connectionState.value = ConnectionState.Error("Lỗi gửi UserID: $status")
@@ -136,19 +119,12 @@ class MainViewModel : ViewModel() {
         try {
             val service = gatt.getService(DeviceUUID.DEVICE_SERVICE_UUID)
             val characteristic = service.getCharacteristic(DeviceUUID.DEVICE_CHARACTERISTIC_UUID)
-
-            if (characteristic == null) {
-                _connectionState.value = ConnectionState.Error("Characteristic không tồn tại")
-                gatt.disconnect()
-                return
+            if (characteristic != null) {
+                characteristic.value = userId.toByteArray(Charsets.UTF_8)
+                gatt.writeCharacteristic(characteristic)
             }
-
-            characteristic.value = userId.toByteArray(Charsets.UTF_8)
-            gatt.writeCharacteristic(characteristic)
         } catch (e: Exception) {
             e.printStackTrace()
-            _connectionState.value = ConnectionState.Error("Lỗi ghi UserID: ${e.message}")
-            gatt.disconnect()
         }
     }
 
@@ -161,7 +137,7 @@ class MainViewModel : ViewModel() {
         _connectionState.value = ConnectionState.NotConnected
         stopHeartRateUpdates()
         heartRateHistory.clear()
-        stepCount = 0 // Reset bước chân khi ngắt kết nối
+        stepCount = 0
     }
 
     // --- API & DATA LOGIC ---
@@ -170,7 +146,7 @@ class MainViewModel : ViewModel() {
         heartRateJob = viewModelScope.launch(Dispatchers.IO) {
             while (true) {
                 fetchHeartRate()
-                delay(1000) // Gọi API mỗi giây
+                delay(1000)
             }
         }
     }
@@ -198,27 +174,15 @@ class MainViewModel : ViewModel() {
                     val accZ = data.accZ ?: 0.0
                     val tempMpu = data.temp ?: 0.0
 
-                    // --- LOGIC ĐẾM BƯỚC CHÂN (Step Counter) ---
-                    // Tính độ lớn vector gia tốc (Magnitude)
+                    // Tính bước chân
                     val magnitude = sqrt(accX * accX + accY * accY + accZ * accZ)
-
-                    // Kiểm tra ngưỡng (Threshold)
                     val currentTime = System.currentTimeMillis()
                     if (magnitude > STEP_THRESHOLD && (currentTime - lastStepTimestamp > STEP_DELAY_MS)) {
                         stepCount++
                         lastStepTimestamp = currentTime
                     }
-                    // ------------------------------------------
 
-                    // Cảnh báo âm thanh
-                    if (warningCode > 0 && _isWarningEnabled.value) {
-                        if (currentTime - lastAlertTimestamp >= ALERT_COOLDOWN) {
-                            _playWarningSound.send(Unit)
-                            lastAlertTimestamp = currentTime
-                        }
-                    }
-
-                    // Logic thống kê BPM
+                    // Thống kê BPM
                     if (currentBpm > 0) {
                         heartRateHistory.add(currentBpm)
                         if (heartRateHistory.size > 50) heartRateHistory.removeAt(0)
@@ -238,10 +202,9 @@ class MainViewModel : ViewModel() {
                             accY = accY,
                             accZ = accZ,
                             tempMpu = tempMpu,
-                            steps = stepCount // Truyền số bước vào State
+                            steps = stepCount
                         )
                     } else {
-                        // Nếu BPM = 0 nhưng có dữ liệu khác
                         if (accX != 0.0 || tempMpu != 0.0) {
                             _heartRateState.value = HeartRateState.Success(
                                 currentBpm = 0, minBpm = 0, maxBpm = 0, avgBpm = 0, warning = 0,
@@ -283,15 +246,9 @@ class MainViewModel : ViewModel() {
             }
         }
     }
-
-    fun toggleWarning(isEnabled: Boolean) {
-        _isWarningEnabled.value = isEnabled
-        if (!isEnabled) lastAlertTimestamp = 0
-    }
 }
 
-// --- DEFINE CÁC CLASS STATE ---
-
+// --- STATE CLASSES ---
 sealed class HeartRateState {
     data object Loading : HeartRateState()
     data object NoData : HeartRateState()
@@ -306,7 +263,7 @@ sealed class HeartRateState {
         val accY: Double,
         val accZ: Double,
         val tempMpu: Double,
-        val steps: Int // Đã thêm trường Steps
+        val steps: Int
     ) : HeartRateState()
     data class Error(val message: String) : HeartRateState()
 }
