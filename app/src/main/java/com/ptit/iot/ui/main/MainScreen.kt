@@ -2,48 +2,40 @@ package com.ptit.iot.ui.main
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
-import android.media.MediaPlayer
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.rounded.Bluetooth
+import androidx.compose.material.icons.rounded.DirectionsRun
+import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ptit.iot.BluetoothScanner
 import com.ptit.iot.R
@@ -52,17 +44,18 @@ import com.ptit.iot.viewmodel.HeartRateState
 import com.ptit.iot.viewmodel.MainViewModel
 import com.ptit.iot.viewmodel.TrainState
 import kotlinx.coroutines.launch
+import kotlin.math.sqrt
 
-// Màu cam đậm đỏ chuyên nghiệp (darker orange-red theme)
-val PrimaryDarkOrange = Color(0xFFD32F2F) // Màu cam đỏ đậm chính
-val SecondaryDarkOrange = Color(0xFFE57373) // Màu cam đỏ nhạt
-val AccentDarkOrange = Color(0xFFEF5350) // Màu nhấn cam đỏ
-val BackgroundDark = Color(0xFFFAFAFA) // Nền nhạt nhưng chuyên nghiệp
-val WarningYellow = Color(0xFFFFEB3B)
-val DangerRed = Color(0xFFB71C1C) // Đỏ đậm hơn
-val SuccessGreen = Color(0xFF388E3C)
-val TextDark = Color(0xFF212121)
-val TextLight = Color(0xFF757575)
+// --- BẢNG MÀU GIAO DIỆN CŨ (THEME CAM) ---
+val ThemeOrange = Color(0xFFEC1860)       // Cam đậm chủ đạo
+val ThemeOrangeLight = Color(0xFFFFCCBC)  // Cam nhạt (nền phụ)
+val ThemeBackground = Color(0xFFFAFAFA)   // Nền trắng xám
+val ThemeSurface = Color(0xFFFFFFFF)      // Trắng tinh (Card)
+val ColorSafe = Color(0xFF4CAF50)         // Xanh lá (An toàn)
+val ColorWarning = Color(0xFFFFC107)      // Vàng (Cảnh báo nhẹ)
+val ColorDanger = Color(0xFFD32F2F)       // Đỏ (Nguy hiểm)
+val TextDark = Color(0xFF212121)          // Chữ đen
+val TextLight = Color(0xFF757575)         // Chữ xám
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,26 +68,11 @@ fun MainScreen(
     val connectionState by viewModel.connectionState.collectAsStateWithLifecycle()
     val scannedDevices by viewModel.scanState.collectAsStateWithLifecycle()
     val trainState by viewModel.trainState.collectAsStateWithLifecycle()
-    val isWarningEnabled by viewModel.isWarningEnabled.collectAsStateWithLifecycle()
 
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
     var showBottomSheet by remember { mutableStateOf(false) }
-
     val bluetoothScanner = remember { BluetoothScanner(context) }
-    val mediaPlayer = remember { MediaPlayer.create(context, R.drawable.heart_small) } // Sửa thành raw sound
-
-    // Xử lý phát âm thanh cảnh báo
-    val lifecycleOwner = LocalLifecycleOwner.current
-    LaunchedEffect(Unit) {
-        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            viewModel.playWarningSound.collect {
-                if (isWarningEnabled) {
-                    mediaPlayer.start()
-                }
-            }
-        }
-    }
 
     LaunchedEffect(userId) {
         userId?.let { viewModel.setUserId(it) }
@@ -102,22 +80,27 @@ fun MainScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Theo Dõi Sức Khỏe Thông Minh", style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold)) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = PrimaryDarkOrange,
-                    titleContentColor = Color.White
-                )
+            CenterAlignedTopAppBar(
+                title = {
+                    Text(
+                        "Health Monitor ESP32",
+                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color.White)
+                    )
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = ThemeOrange
+                ),
+                modifier = Modifier.shadow(8.dp)
             )
         },
-        containerColor = BackgroundDark
+        containerColor = ThemeBackground
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(16.dp)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 when (connectionState) {
@@ -134,29 +117,19 @@ fun MainScreen(
                             }
                         )
                     }
-
-                    is ConnectionState.Connecting -> {
-                        ConnectionLoadingContent()
-                    }
-
+                    is ConnectionState.Connecting -> ConnectionLoadingContent()
                     is ConnectionState.Connected -> {
                         ConnectedContent(
                             heartRateState = heartRateState,
                             trainState = trainState,
-                            isWarningEnabled = isWarningEnabled,
                             onDisconnect = { viewModel.disconnect() },
-                            onTrainModel = { viewModel.trainModel() },
-                            onToggleWarning = { viewModel.toggleWarning(it) }
+                            onTrainModel = { viewModel.trainModel() }
                         )
                     }
-
                     is ConnectionState.Error -> {
-                        val error = connectionState as ConnectionState.Error
-                        ErrorContent(
-                            message = error.message,
-                            onRetry = { viewModel.disconnect() },
-                            onDisconnect = { viewModel.disconnect() }
-                        )
+                        ErrorContent((connectionState as ConnectionState.Error).message) {
+                            viewModel.disconnect()
+                        }
                     }
                 }
             }
@@ -169,7 +142,7 @@ fun MainScreen(
                     bluetoothScanner.stopScan()
                 },
                 sheetState = sheetState,
-                containerColor = BackgroundDark
+                containerColor = ThemeSurface
             ) {
                 DeviceScannerContent(
                     devices = scannedDevices,
@@ -180,9 +153,7 @@ fun MainScreen(
                     },
                     onScanAgain = {
                         viewModel.clearScannedDevices()
-                        bluetoothScanner.startScan { device ->
-                            viewModel.addScannedDevice(device)
-                        }
+                        bluetoothScanner.startScan { device -> viewModel.addScannedDevice(device) }
                     }
                 )
             }
@@ -190,576 +161,360 @@ fun MainScreen(
     }
 }
 
+// --- GIAO DIỆN CHÍNH KHI ĐÃ KẾT NỐI ---
 @Composable
 fun ConnectedContent(
     heartRateState: HeartRateState,
     trainState: TrainState,
-    isWarningEnabled: Boolean,
     onDisconnect: () -> Unit,
-    onTrainModel: () -> Unit,
-    onToggleWarning: (Boolean) -> Unit
+    onTrainModel: () -> Unit
 ) {
     when (heartRateState) {
         is HeartRateState.Success -> {
             val data = heartRateState
-            HeartRateContent(
-                currentBpm = data.currentBpm,
-                minBpm = data.minBpm,
-                maxBpm = data.maxBpm,
-                avgBpm = data.avgBpm,
-                warning = data.warning,
-                spo2 = data.spo2,
-                accX = data.accX,
-                accY = data.accY,
-                accZ = data.accZ,
-                tempMpu = data.tempMpu,
-                steps = data.steps,
-                isWarningEnabled = isWarningEnabled,
-                onToggleWarning = onToggleWarning,
-                onDisconnect = onDisconnect
-            )
-        }
 
+            // 1. THANH CẢNH BÁO (THAY THẾ LOA)
+            StatusBanner(warningCode = data.warning)
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 2. KHỐI NHỊP TIM TRUNG TÂM
+            HeartRateDisplay(
+                bpm = data.currentBpm,
+                min = data.minBpm,
+                max = data.maxBpm,
+                avg = data.avgBpm
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 3. GRID THÔNG SỐ (SpO2 & BƯỚC CHÂN)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Thẻ SpO2
+                InfoCard(
+                    title = "Nồng độ Oxy",
+                    value = "${data.spo2}",
+                    unit = "%",
+                    iconId = R.drawable.main_heart, // Thay icon phổi nếu có
+                    color = if(data.spo2 >= 95) ColorSafe else ColorWarning,
+                    modifier = Modifier.weight(1f)
+                )
+
+                // Thẻ Bước Chân
+                InfoCard(
+                    title = "Bước chân",
+                    value = "${data.steps}",
+                    unit = "bước",
+                    iconVector = Icons.Rounded.DirectionsRun,
+                    color = Color.Blue,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 4. MÔI TRƯỜNG & GIA TỐC
+            EnvironmentCard(data.tempMpu, data.accX, data.accY, data.accZ)
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 5. NÚT TRAIN MODEL
+            TrainSection(trainState, onTrainModel)
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // 6. NÚT NGẮT KẾT NỐI
+            OutlinedButton(
+                onClick = onDisconnect,
+                modifier = Modifier.fillMaxWidth(),
+                border = BorderStroke(1.dp, ThemeOrange),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = ThemeOrange)
+            ) {
+                Text("NGẮT KẾT NỐI", fontWeight = FontWeight.Bold)
+            }
+        }
         is HeartRateState.NoData, is HeartRateState.Loading -> {
-            WaitingForDataContent(
-                onDisconnect = onDisconnect
-            )
+            LoadingView(onDisconnect)
         }
-
         is HeartRateState.Error -> {
-            val error = heartRateState as HeartRateState.Error
-            ErrorContent(
-                message = error.message,
-                onRetry = onDisconnect,
-                onDisconnect = onDisconnect
-            )
+            ErrorContent((heartRateState as HeartRateState.Error).message, onDisconnect)
         }
     }
+}
 
-    Spacer(modifier = Modifier.height(32.dp))
+// --- CÁC COMPONENT CON ---
 
-    // Phần Train Model
-    TrainModelSection(
-        trainState = trainState,
-        onTrainClick = onTrainModel
+@Composable
+fun StatusBanner(warningCode: Int) {
+    // Logic màu sắc và chữ dựa trên warning code
+    val (bgColor, textColor, mainText, subText) = when (warningCode) {
+        0 -> Quadruple(ColorSafe, Color.White, "BÌNH THƯỜNG", "Nhịp tim ổn định")
+        1 -> Quadruple(ColorWarning, TextDark, "CẢNH BÁO", "Nhịp tim hơi cao")
+        else -> Quadruple(ColorDanger, Color.White, "NGUY HIỂM", "Nhịp tim bất thường!")
+    }
+
+    // Hiệu ứng nhấp nháy nếu là Nguy Hiểm
+    val infiniteTransition = rememberInfiniteTransition()
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = if (warningCode > 1) 0.5f else 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(400),
+            repeatMode = RepeatMode.Reverse
+        )
     )
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { this.alpha = alpha }, // Áp dụng nhấp nháy
+        colors = CardDefaults.cardColors(containerColor = bgColor),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = null,
+                tint = textColor,
+                modifier = Modifier.size(36.dp)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Column {
+                Text(
+                    text = mainText,
+                    style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = textColor)
+                )
+                Text(
+                    text = subText,
+                    style = TextStyle(fontSize = 14.sp, color = textColor.copy(alpha = 0.9f))
+                )
+            }
+        }
+    }
 }
 
 @Composable
-fun HeartRateContent(
-    currentBpm: Int,
-    minBpm: Int,
-    maxBpm: Int,
-    avgBpm: Int,
-    warning: Int,
-    spo2: Int,
-    accX: Double,
-    accY: Double,
-    accZ: Double,
-    tempMpu: Double,
-    steps: Int,
-    isWarningEnabled: Boolean,
-    onToggleWarning: (Boolean) -> Unit,
-    onDisconnect: () -> Unit,
-) {
+fun HeartRateDisplay(bpm: Int, min: Int, max: Int, avg: Int) {
+    // Animation Pulse
     val pulseScale by animateFloatAsState(
-        targetValue = if (currentBpm > 0) 1.1f else 1f,
-        animationSpec = tween(durationMillis = 500)
+        targetValue = if (bpm > 0) 1.1f else 1f,
+        animationSpec = tween(500)
     )
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Phần Nhịp Tim với animation
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // Vòng tròn trung tâm
         Box(
             modifier = Modifier
-                .size(220.dp)
+                .size(200.dp)
+                .shadow(16.dp, CircleShape)
                 .clip(CircleShape)
-                .shadow(12.dp, CircleShape)
                 .background(
                     brush = Brush.radialGradient(
-                        colors = listOf(AccentDarkOrange, PrimaryDarkOrange)
+                        colors = listOf(Color(0xFFFF8A65), ThemeOrange) // Gradient Cam
                     )
                 ),
             contentAlignment = Alignment.Center
         ) {
             Image(
                 painter = painterResource(id = R.drawable.main_heart),
-                contentDescription = "Heart",
-                modifier = Modifier
-                    .size(150.dp)
-                    .scale(pulseScale)
+                contentDescription = null,
+                modifier = Modifier.size(120.dp).scale(pulseScale)
             )
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.offset(y = (-10).dp)
-            ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.offset(y = 10.dp)) {
                 Text(
-                    text = "$currentBpm",
-                    style = TextStyle(
-                        fontSize = 52.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                    text = "$bpm",
+                    style = TextStyle(fontSize = 52.sp, fontWeight = FontWeight.Black, color = Color.White)
                 )
-                Text(
-                    text = "bpm",
-                    style = TextStyle(fontSize = 18.sp, color = Color.White.copy(alpha = 0.8f))
-                )
+                Text("BPM", style = TextStyle(fontSize = 16.sp, color = Color.White.copy(alpha = 0.9f)))
             }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Row(
+        // Thanh thống kê nhỏ
+        Card(
+            colors = CardDefaults.cardColors(containerColor = ThemeSurface),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            InfoBox(value = minBpm.toString(), label = "Min", modifier = Modifier.weight(1f).padding(4.dp))
-            InfoBox(value = avgBpm.toString(), label = "TB", modifier = Modifier.weight(1f).padding(4.dp))
-            InfoBox(value = maxBpm.toString(), label = "Max", modifier = Modifier.weight(1f).padding(4.dp))
-        }
-
-        // Phần SPO2
-        Spacer(modifier = Modifier.height(24.dp))
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .shadow(8.dp, RoundedCornerShape(16.dp)),
-            colors = CardDefaults.cardColors(containerColor = SecondaryDarkOrange),
-            shape = RoundedCornerShape(16.dp)
+            elevation = CardDefaults.cardElevation(2.dp)
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(16.dp).fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = "SpO2",
-                    style = TextStyle(
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = TextDark
-                    )
-                )
-                Text(
-                    text = "$spo2%",
-                    style = TextStyle(
-                        fontSize = 36.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (spo2 >= 95) SuccessGreen else DangerRed
-                    )
-                )
+                StatItem("Min", "$min")
+                StatItem("Avg", "$avg")
+                StatItem("Max", "$max")
             }
-        }
-
-        // Phần Số Bước Chân
-        Spacer(modifier = Modifier.height(32.dp))
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .shadow(8.dp, RoundedCornerShape(16.dp)),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
-                    Text(
-                        text = "Số Bước Chân",
-                        style = TextStyle(
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = TextLight
-                        )
-                    )
-                    Text(
-                        text = "$steps",
-                        style = TextStyle(
-                            fontSize = 36.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryDarkOrange
-                        )
-                    )
-                    Text(
-                        text = "bước",
-                        style = TextStyle(fontSize = 14.sp, color = TextLight)
-                    )
-                }
-                Icon(
-                    painter = painterResource(id = R.drawable.main_heart), // Giả sử icon footsteps đúng
-                    contentDescription = "Steps Icon",
-                    tint = PrimaryDarkOrange,
-                    modifier = Modifier.size(48.dp)
-                )
-            }
-        }
-
-        // Phần MPU6050 & Nhiệt Độ
-        Spacer(modifier = Modifier.height(32.dp))
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .shadow(8.dp, RoundedCornerShape(16.dp)),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Cảm Biến Chuyển Động & Nhiệt Độ",
-                    style = TextStyle(
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = PrimaryDarkOrange
-                    )
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Nhiệt Độ Chip:",
-                        style = TextStyle(fontSize = 16.sp, color = TextLight)
-                    )
-                    Text(
-                        text = String.format("%.1f °C", tempMpu),
-                        style = TextStyle(
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AccentDarkOrange
-                        )
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                Divider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 1.dp)
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "Gia Tốc (m/s²):",
-                    style = TextStyle(fontSize = 16.sp, color = TextLight)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    AxisBox(label = "X", value = accX, color = DangerRed)
-                    AxisBox(label = "Y", value = accY, color = SuccessGreen)
-                    AxisBox(label = "Z", value = accZ, color = PrimaryDarkOrange)
-                }
-            }
-        }
-
-        // Phần Trạng Thái Cảnh Báo - Làm đẹp hơn với animation rung icon
-        Spacer(modifier = Modifier.height(32.dp))
-        val (statusColor, statusTitle, statusDescription) = when (warning) {
-            0 -> Triple(SuccessGreen.copy(alpha = 0.2f), "Bình Thường", "Nhịp tim ổn định, sức khỏe tốt.")
-            1 -> Triple(WarningYellow.copy(alpha = 0.2f), "Cảnh Báo", "Nhịp tim hơi cao, hãy nghỉ ngơi.")
-            else -> Triple(DangerRed.copy(alpha = 0.2f), "Nguy Hiểm", "Nhịp tim bất thường, liên hệ bác sĩ ngay!")
-        }
-
-        val infiniteTransition = rememberInfiniteTransition()
-        val rotation by infiniteTransition.animateFloat(
-            initialValue = -10f,
-            targetValue = 10f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(200),
-                repeatMode = RepeatMode.Reverse
-            )
-        )
-
-        AnimatedVisibility(visible = warning > 0, enter = fadeIn(), exit = fadeOut()) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(12.dp, RoundedCornerShape(16.dp))
-                    .background(statusColor.copy(alpha = 0.8f)),
-                colors = CardDefaults.cardColors(containerColor = statusColor),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Warning,
-                        contentDescription = "Warning",
-                        tint = if (warning == 1) WarningYellow else DangerRed,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .rotate(if (warning > 1) rotation else 0f) // Rung icon nếu nguy hiểm
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column {
-                        Text(
-                            text = statusTitle,
-                            style = TextStyle(
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextDark
-                            )
-                        )
-                        Text(
-                            text = statusDescription,
-                            style = TextStyle(fontSize = 14.sp, color = TextDark, textAlign = TextAlign.Start)
-                        )
-                    }
-                }
-            }
-        }
-
-        // Toggle Cảnh Báo Âm Thanh
-        Spacer(modifier = Modifier.height(24.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = "Bật Cảnh Báo Âm Thanh (Loa)",
-                style = TextStyle(fontSize = 16.sp, color = TextDark)
-            )
-            Switch(
-                checked = isWarningEnabled,
-                onCheckedChange = onToggleWarning,
-                colors = SwitchDefaults.colors(checkedThumbColor = PrimaryDarkOrange)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Button(
-            onClick = onDisconnect,
-            colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkOrange),
-            shape = RoundedCornerShape(8.dp),
-            modifier = Modifier
-                .fillMaxWidth(0.8f)
-                .height(48.dp)
-        ) {
-            Text("Ngắt Kết Nối", color = Color.White, fontSize = 16.sp)
         }
     }
 }
 
 @Composable
-fun TrainModelSection(
-    trainState: TrainState,
-    onTrainClick: () -> Unit
+fun StatItem(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = ThemeOrange)
+        Text(label, fontSize = 12.sp, color = TextLight)
+    }
+}
+
+@Composable
+fun InfoCard(
+    title: String,
+    value: String,
+    unit: String,
+    iconId: Int? = null,
+    iconVector: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    color: Color,
+    modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(8.dp, RoundedCornerShape(16.dp)),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = ThemeSurface),
+        elevation = CardDefaults.cardElevation(4.dp),
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "Huấn Luyện Mô Hình AI",
-                style = TextStyle(
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = PrimaryDarkOrange
-                )
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Huấn luyện lại mô hình để cải thiện độ chính xác dự đoán.",
-                style = TextStyle(fontSize = 14.sp, color = TextLight)
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            when (trainState) {
-                is TrainState.Loading -> {
-                    CircularProgressIndicator(color = PrimaryDarkOrange, modifier = Modifier.align(Alignment.CenterHorizontally))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (iconId != null) {
+                    Icon(painter = painterResource(iconId), contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+                } else if (iconVector != null) {
+                    Icon(imageVector = iconVector, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
                 }
-                is TrainState.Success -> {
-                    Text("Huấn luyện thành công!", color = SuccessGreen, fontWeight = FontWeight.Bold)
-                }
-                is TrainState.Error -> {
-                    Text("Lỗi: ${trainState.message}", color = DangerRed)
-                }
-                else -> {}
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(title, fontSize = 14.sp, color = TextLight, fontWeight = FontWeight.Medium)
             }
             Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = onTrainClick,
-                colors = ButtonDefaults.buttonColors(containerColor = AccentDarkOrange),
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            ) {
-                Text("Bắt Đầu Huấn Luyện", color = Color.White)
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(value, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(unit, fontSize = 14.sp, color = TextLight, modifier = Modifier.padding(bottom = 4.dp))
             }
         }
     }
 }
 
 @Composable
-fun AxisBox(label: String, value: Double, color: Color) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .width(100.dp)
-            .background(color.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-            .border(1.dp, color.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-            .padding(vertical = 12.dp, horizontal = 8.dp)
+fun EnvironmentCard(temp: Double, accX: Double, accY: Double, accZ: Double) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = ThemeSurface),
+        elevation = CardDefaults.cardElevation(4.dp),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Text(
-            text = label,
-            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = color)
-        )
-        Text(
-            text = String.format("%.2f", value),
-            style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = TextDark)
-        )
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.Thermostat, null, tint = ThemeOrange)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Cảm biến MPU6050", fontWeight = FontWeight.Bold, color = TextDark)
+            }
+            Divider(modifier = Modifier.padding(vertical = 12.dp), color = Color.LightGray.copy(alpha = 0.2f))
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column {
+                    Text("Nhiệt độ", fontSize = 12.sp, color = TextLight)
+                    Text("${String.format("%.1f", temp)}°C", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ThemeOrange)
+                }
+
+                val totalG = sqrt(accX*accX + accY*accY + accZ*accZ)
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("Gia tốc", fontSize = 12.sp, color = TextLight)
+                    Text("${String.format("%.2f", totalG)} m/s²", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                }
+            }
+        }
     }
 }
 
 @Composable
-fun WaitingForDataContent(onDisconnect: () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .size(220.dp)
-                .clip(CircleShape)
-                .background(Color.LightGray.copy(alpha = 0.2f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.main_heart),
-                contentDescription = null,
-                modifier = Modifier.size(150.dp)
-            )
-            CircularProgressIndicator(
-                color = PrimaryDarkOrange,
-                modifier = Modifier.size(220.dp)
-            )
+fun TrainSection(state: TrainState, onClick: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = ThemeSurface), elevation = CardDefaults.cardElevation(2.dp)) {
+        Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Huấn luyện AI", fontWeight = FontWeight.Bold, color = TextDark)
+            Spacer(modifier = Modifier.height(12.dp))
+            if (state is TrainState.Loading) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = ThemeOrange)
+            } else {
+                Button(
+                    onClick = onClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = ThemeOrange),
+                    modifier = Modifier.fillMaxWidth(0.8f)
+                ) {
+                    Text("CẬP NHẬT MODEL")
+                }
+            }
+            if (state is TrainState.Success) Text("Thành công!", color = ColorSafe, fontSize = 12.sp, modifier = Modifier.padding(top=8.dp))
+            if (state is TrainState.Error) Text(state.message, color = ColorDanger, fontSize = 12.sp, modifier = Modifier.padding(top=8.dp))
         }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-            InfoBox(value = "--", label = "Min", modifier = Modifier.weight(1f).padding(4.dp))
-            InfoBox(value = "--", label = "TB", modifier = Modifier.weight(1f).padding(4.dp))
-            InfoBox(value = "--", label = "Max", modifier = Modifier.weight(1f).padding(4.dp))
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            "Đang đồng bộ dữ liệu từ thiết bị... Vui lòng chờ giây lát.",
-            style = TextStyle(color = TextLight, fontSize = 16.sp, textAlign = TextAlign.Center)
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-        Button(
-            onClick = onDisconnect,
-            colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkOrange)
-        ) { Text("Hủy Kết Nối", color = Color.White) }
     }
 }
 
 @Composable
-fun InfoBox(
-    value: String,
-    label: String,
-    modifier: Modifier = Modifier,
-    valueFontSize: androidx.compose.ui.unit.TextUnit = 30.sp
-) {
-    Box(
-        modifier = modifier
-            .height(90.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(Color.White)
-            .shadow(4.dp, RoundedCornerShape(10.dp))
-            .padding(8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = value,
-                style = TextStyle(fontSize = valueFontSize, fontWeight = FontWeight.Bold, color = PrimaryDarkOrange)
-            )
-            Text(text = label, style = TextStyle(fontSize = 16.sp, color = TextLight))
-        }
+fun LoadingView(onDisconnect: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 40.dp)) {
+        CircularProgressIndicator(color = ThemeOrange)
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("Đang đồng bộ dữ liệu...", color = TextLight)
+        Spacer(modifier = Modifier.height(32.dp))
+        Button(onClick = onDisconnect, colors = ButtonDefaults.buttonColors(containerColor = TextLight)) { Text("Hủy") }
     }
 }
+
+// --- MÀN HÌNH CHƯA KẾT NỐI & SCAN (Giữ nguyên logic, đổi màu) ---
 
 @Composable
 fun EmptyStateContent(onScanClick: () -> Unit) {
     Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(top = 60.dp)
     ) {
         Image(
             painter = painterResource(id = R.drawable.main_heart),
-            contentDescription = "Heart Icon",
-            modifier = Modifier.size(120.dp)
+            contentDescription = null,
+            modifier = Modifier.size(100.dp).graphicsLayer { alpha = 0.5f }
         )
-        Spacer(modifier = Modifier.height(32.dp))
-        Text("Chưa Kết Nối Thiết Bị", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = TextDark)
+        Spacer(modifier = Modifier.height(24.dp))
+        Text("Chưa kết nối thiết bị", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = TextDark)
         Spacer(modifier = Modifier.height(8.dp))
-        Text("Nhấn nút bên dưới để quét và kết nối.", color = TextLight, textAlign = TextAlign.Center)
-        Spacer(modifier = Modifier.height(16.dp))
+        Text("Vui lòng kết nối để bắt đầu", color = TextLight)
+        Spacer(modifier = Modifier.height(32.dp))
         Button(
             onClick = onScanClick,
-            colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkOrange)
+            colors = ButtonDefaults.buttonColors(containerColor = ThemeOrange),
+            modifier = Modifier.height(50.dp)
         ) {
-            Text("Quét Thiết Bị Bluetooth", color = Color.White)
+            Icon(Icons.Rounded.Bluetooth, null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("QUÉT THIẾT BỊ")
         }
     }
 }
 
 @Composable
 fun ConnectionLoadingContent() {
-    Box(modifier = Modifier.fillMaxWidth().height(300.dp), contentAlignment = Alignment.Center) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(color = PrimaryDarkOrange, strokeWidth = 4.dp)
+            CircularProgressIndicator(color = ThemeOrange)
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Đang Kết Nối Bluetooth... Vui lòng chờ.", color = TextDark)
+            Text("Đang kết nối...", color = TextLight)
         }
     }
 }
 
 @Composable
-fun ErrorContent(message: String, onRetry: () -> Unit, onDisconnect: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(
-            imageVector = Icons.Default.Warning,
-            contentDescription = "Error",
-            tint = DangerRed,
-            modifier = Modifier.size(64.dp)
-        )
+fun ErrorContent(message: String, onRetry: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 50.dp)) {
+        Icon(Icons.Default.Warning, null, tint = ColorDanger, modifier = Modifier.size(50.dp))
         Spacer(modifier = Modifier.height(16.dp))
-        Text("Lỗi: $message", color = DangerRed, textAlign = TextAlign.Center, fontSize = 18.sp)
-        Spacer(modifier = Modifier.height(16.dp))
-        Row {
-            OutlinedButton(
-                onClick = onDisconnect,
-                border = BorderStroke(1.dp, PrimaryDarkOrange)
-            ) { Text("Ngắt Kết Nối", color = PrimaryDarkOrange) }
-            Spacer(modifier = Modifier.width(16.dp))
-            Button(
-                onClick = onRetry,
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkOrange)
-            ) { Text("Thử Lại", color = Color.White) }
-        }
+        Text("Lỗi kết nối", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text(message, color = TextLight, textAlign = TextAlign.Center, modifier = Modifier.padding(16.dp))
+        Button(onClick = onRetry, colors = ButtonDefaults.buttonColors(containerColor = ThemeOrange)) { Text("Thử lại") }
     }
 }
 
@@ -771,51 +526,42 @@ fun DeviceScannerContent(
     onScanAgain: () -> Unit
 ) {
     Column(modifier = Modifier.padding(16.dp)) {
-        Text("Chọn Thiết Bị Bluetooth", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextDark)
+        Text("Chọn Thiết Bị", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextDark)
         Spacer(modifier = Modifier.height(16.dp))
-        if (devices.isEmpty()) {
-            Text("Đang quét thiết bị... Vui lòng chờ.", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, color = TextLight)
-            Spacer(modifier = Modifier.height(16.dp))
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally), color = PrimaryDarkOrange)
-        } else {
-            devices.forEach { device ->
-                DeviceItem(deviceName = device.name ?: "Thiết Bị Không Tên", deviceAddress = device.address, onClick = { onDeviceSelected(device) })
+
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            if (devices.isEmpty()) {
+                item {
+                    Text("Đang quét...", color = TextLight)
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = ThemeOrange)
+                }
+            }
+            items(devices.size) { index ->
+                val device = devices[index]
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { onDeviceSelected(device) },
+                    colors = CardDefaults.cardColors(containerColor = ThemeBackground),
+                    elevation = CardDefaults.cardElevation(2.dp)
+                ) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.Bluetooth, null, tint = ThemeOrange)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text(device.name ?: "Không tên", fontWeight = FontWeight.Bold)
+                            Text(device.address, fontSize = 12.sp, color = TextLight)
+                        }
+                    }
+                }
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = onScanAgain,
-            colors = ButtonDefaults.buttonColors(containerColor = PrimaryDarkOrange),
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        ) { Text("Quét Lại", color = Color.White) }
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = ThemeOrange)
+        ) { Text("QUÉT LẠI") }
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
-@Composable
-fun DeviceItem(deviceName: String, deviceAddress: String, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .shadow(4.dp, RoundedCornerShape(8.dp)),
-        onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = Color.White)
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                painter = painterResource(id = R.drawable.main_heart), // Giả sử icon bluetooth đúng
-                contentDescription = "Bluetooth",
-                tint = PrimaryDarkOrange,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text(deviceName, fontWeight = FontWeight.Bold, color = TextDark)
-                Text(deviceAddress, fontSize = 12.sp, color = TextLight)
-            }
-        }
-    }
-}
+data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)

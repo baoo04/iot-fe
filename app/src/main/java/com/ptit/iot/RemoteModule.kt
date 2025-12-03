@@ -8,7 +8,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object RemoteModule {
-    private const val BASE_URL: String = "http://192.168.26."
+    private const val BASE_URL: String = "http://10.124.23.157:8080"
     var token = ""
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {

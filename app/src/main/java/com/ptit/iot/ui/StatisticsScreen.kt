@@ -82,7 +82,14 @@ fun StatisticsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFFAFAFA))
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFFD32F2F),
+                        Color(0xFFEF5350)
+                    )
+                )
+            )
     ) {
         Column(
             modifier = Modifier
@@ -213,7 +220,6 @@ fun HeartRateCard(bpm: Double, status: String, color: Color) {
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Status Chip
                 Box(
                     modifier = Modifier
                         .background(color.copy(alpha = 0.1f), RoundedCornerShape(20.dp))
@@ -437,7 +443,6 @@ fun StatisticsScreenEnhanced(
         viewModel.loadHeartRate()
     }
 
-    // Collect profile
     LaunchedEffect(Unit) {
         lifecycleOwner.safeCollectFlow(viewModel.profileState) { state ->
             if (state is Resource.Success) profileData = state.data
@@ -465,9 +470,18 @@ fun StatisticsScreenEnhanced(
             viewModel.loadHeartRate()
         }
     }
-    Box(modifier = Modifier
-        .fillMaxSize()
-        .background(Color(0xFFF5F5F5))) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFFD32F2F),  // đỏ đậm
+                        Color(0xFFEF5350)   // đỏ nhạt
+                    )
+                )
+            )
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -476,7 +490,6 @@ fun StatisticsScreenEnhanced(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
-            // Header
             Text(
                 text = "📊 Thống Kê Sức Khỏe",
                 fontSize = 28.sp,
@@ -485,7 +498,6 @@ fun StatisticsScreenEnhanced(
             )
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Heart Rate Card
             if (heartData != null) {
                 HeartRateCard(
                     bpm = heartData!!.bpm ?: 0.0,
@@ -495,18 +507,15 @@ fun StatisticsScreenEnhanced(
                 Spacer(modifier = Modifier.height(20.dp))
             }
 
-            // Profile Card
             if (profileData != null) {
                 Spacer(modifier = Modifier.height(20.dp))
             }
 
-            // BMI & Health Metrics
             if (profileData != null && heartData != null) {
                 HealthMetricsCard(profileData!!, heartData!!)
                 Spacer(modifier = Modifier.height(20.dp))
             }
 
-            // Additional Analysis Card
             if (profileData != null && heartData != null) {
                 HealthAnalysisCard(profileData!!, heartData!!)
                 Spacer(modifier = Modifier.height(20.dp))
@@ -515,6 +524,7 @@ fun StatisticsScreenEnhanced(
             Spacer(modifier = Modifier.height(40.dp))
         }
     }
+
 }
 
 @Composable
@@ -557,7 +567,7 @@ fun HealthAnalysisCard(profile: ProfileResponse.Data, heart: HeartRateResponse.D
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
-            Text("📌 Phân Tích Chiều Cao & Cân Nặng", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = analysisColor)
+            Text("Phân Tích Chiều Cao & Cân Nặng", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = analysisColor)
             Spacer(modifier = Modifier.height(12.dp))
             adviceList.forEach { advice ->
                 Row(modifier = Modifier.padding(vertical = 4.dp)) {
